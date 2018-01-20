@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -8,7 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	wire "github.com/tendermint/go-wire"
+	cmn "github.com/tendermint/tmlibs/common"
 	"github.com/tendermint/tmlibs/log"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 func createTestMConnection(conn net.Conn) *MConnection {
@@ -312,4 +317,39 @@ func TestMConnectionTrySend(t *testing.T) {
 	assert.Equal("TrySend", <-resultCh)
 	server.Read(make([]byte, len(msg)))
 	assert.Equal("Send", <-resultCh) // Order constrained by parallel blocking above
+}
+
+func TestMConnectionRecvPkt(t *testing.T) {
+	go func() {
+		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	server, client := netPipe()
+	defer server.Close() // nolint: errcheck
+	defer client.Close() // nolint: errcheck
+
+	mconn := createTestMConnection(client)
+	err := mconn.Start()
+	require.Nil(t, err)
+	defer mconn.Stop()
+
+	status := mconn.Status()
+	assert.NotNil(t, status)
+	chDesc := status.Channels[0]
+	//ch := mconn.channelsIdx[chDesc.ID]
+
+	for i := 0; ; i++ {
+		pkt := msgPacket{
+			ChannelID: chDesc.ID,
+			EOF:       0x0,
+			Bytes:     cmn.RandBytes(1024),
+		}
+		if i%7 == 0 {
+			pkt.EOF = 0x01
+		}
+		n, err := new(int), new(error)
+		legacy.WriteOctet(packetTypeMsg, server, n, err)
+		wire.WriteBinary(pkt, server, n, err)
+		//_, err := ch.recvMsgPacket(pkt)
+		require.Nil(t, *err)
+	}
 }

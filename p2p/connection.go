@@ -151,6 +151,8 @@ func NewMConnectionWithConfig(conn net.Conn, chDescs []*ChannelDescriptor, onRec
 
 	for _, desc := range chDescs {
 		channel := newChannel(mconn, *desc)
+		fmt.Println("CHANNEL", channel, desc)
+		fmt.Println(len(channel.recving), cap(channel.recving))
 		channelsIdx[channel.desc.ID] = channel
 		channels = append(channels, channel)
 	}
@@ -686,8 +688,10 @@ func writeMsgPacketTo(packet msgPacket, w io.Writer, n *int, err *error) {
 func (ch *Channel) recvMsgPacket(packet msgPacket) ([]byte, error) {
 	ch.Logger.Debug("Read Msg Packet", "conn", ch.conn, "packet", packet)
 	if ch.desc.RecvMessageCapacity < len(ch.recving)+len(packet.Bytes) {
+		fmt.Println("EH", ch.desc.RecvMessageCapacity, len(ch.recving), len(packet.Bytes))
 		return nil, wire.ErrBinaryReadOverflow
 	}
+	//fmt.Println(len(ch.recving), cap(ch.recving), len(packet.Bytes))
 	ch.recving = append(ch.recving, packet.Bytes...)
 	if packet.EOF == byte(0x01) {
 		msgBytes := ch.recving
